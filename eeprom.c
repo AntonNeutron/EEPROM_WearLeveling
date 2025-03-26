@@ -69,7 +69,7 @@ static volatile uint8_t current_byte_index = 0;
 /* ************************************ скрипт на питоне генерирует код для переменных  ******************************
 
 # Размер EEPROM
-EEPROM_SIZE = 1000
+EEPROM_SIZE = 4000
 EEPROM_START_ADR = 100  # Начальный адрес
 
 # Таблица данных (name_param, тип, количество элементов)
@@ -131,8 +131,8 @@ print("};")
 
 // Необходимо заполнить и при необходимости добавить следующую структуру, так же для заполнения таблицы можно воспользоваться скриптом питона
 enum {
-	EEPROM_SIZE = 1000,
-	EEPROM_START_ADR = 00,
+	EEPROM_SIZE = 4000,
+	EEPROM_START_ADR = 100,
 
 	EE_LCD_LIGHT_SIZE = sizeof(uint8_t),
 	EE_LCD_LIGHT_COUNT = 5,
@@ -246,60 +246,37 @@ void EEPROM_WriteWearLeveled(const uint8_t index, const void * data) {
   // Чтение данных о параметре из flash
   EEPROM_ReadParam(index, &param);  // index — это индекс в массиве param_eeprom
   uint16_t address = EEPROM_FindCurrentAddress(index, &param) -1; // -1 мы получаем адрес начало блока, а не записанных данных
-
-  // Only perform the write if the new value is different from what's currently stored
   if (EEPROM_CompareData(address+1,data,param.element_size))  return;
-
-
-  // Store the old status value
   uint8_t newStatusValue = EEPROM_Read(address) + 1;
-
   // Move pointer to the next element in the buffer, wrapping around if necessary
   address += param.element_size + 1;
   // получаем адрес следующего за пределами блока
   uint16_t EeBufOffBlock = param.addr + param.buffer_count * (param.element_size + 1); 
   if (address == EeBufOffBlock) // если полученный адрес равен адресу за пределами блока, то какого быть не может и мы меняем его на начальный
     address = param.addr;
-
-  // If self-programming is used in the application, insert code here
-  // to wait for any self-programming operations to finish before
-  // writing to the EEPROM.
-
-  // Update the param buffer in the EEPROM
- // EEPROM_Write(address, data);
-
-  // Update the status buffer in the EEPROM
- // EEPROM_Write(address + EE_PARAM_BUFFER_SIZE, oldStatusValue + 1);
- eeprom_writebuffer_add(&address,&newStatusValue, data, &param.element_size);
+  eeprom_writebuffer_add(&address,&newStatusValue, data, &param.element_size);
 }
 
 // Функция для добавления записи в буфер
 void eeprom_writebuffer_add(const uint16_t *addr, const uint8_t *newStatus, const uint8_t *data, const uint8_t *data_size) {
 	// Проверка заполненности буфера
-	
 	if (eeprom_busy_flag) return;
-	
 	uint8_t next_head = (eeprom_writebuffer_head + 1) % MAX_WRITE_BUFFER_SIZE;
 	if (next_head == eeprom_writebuffer_tail) {
 		// Буфер переполнен, можно выполнить обработку ошибки
 		return;
 	}
-
 	// Заполняем запись в буфере
 	eeprom_writebuffer[eeprom_writebuffer_head].adr_eeprom = *addr;
 	eeprom_writebuffer[eeprom_writebuffer_head].newStatus = *newStatus;
 	eeprom_writebuffer[eeprom_writebuffer_head].data_ptr = data;
 	eeprom_writebuffer[eeprom_writebuffer_head].data_size = *data_size;
-
 	// Сдвигаем указатель головы буфера
 	eeprom_writebuffer_head = next_head;
-
-	// Если запись не занята и буфер не пуст (первый элемент)
-
 }
 
 void StartWriteBuffer (void){
-		// Запускаем запись 
+	// Запускаем запись 
 	if (!eeprom_busy_flag) {
 		eeprom_busy_flag = 1;
 		//current_byte_index = 1;  // После newStatus переходим к данным
@@ -308,7 +285,6 @@ void StartWriteBuffer (void){
 }
 
 // Вектор прерывания "EEPROM Ready" для Atmega128
-
 ISR(EE_READY_vect){
     static volatile const buffer_record_t *record = NULL;
 	
