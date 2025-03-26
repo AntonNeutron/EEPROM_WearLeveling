@@ -2,7 +2,7 @@
  * eeprom.c
  *
  * Copy date: 20.03.2025 20:32:28
- *  Author: https://github.com/AntonNeutron
+ *  Author: https://github.com/AntonNeutron/EEPROM_WearLeveling
  */ 
 /*
 
@@ -42,94 +42,94 @@
 #include "eeprom.h"
 
 typedef struct {
-	uint8_t element_size;  // Ðàçìåð äàííûõ (áåç ó÷åòà ñ÷åò÷èêà)
-	uint8_t buffer_count;  // Êîëè÷åñòâî ýëåìåíòîâ â áóôåðå
-	uint16_t addr;         // Íà÷àëüíûé àäðåñ â EEPROM
+	uint8_t element_size;  // Ð Ð°Ð·Ð¼ÐµÑ€ Ð´Ð°Ð½Ð½Ñ‹Ñ… (Ð±ÐµÐ· ÑƒÑ‡ÐµÑ‚Ð° ÑÑ‡ÐµÑ‚Ñ‡Ð¸ÐºÐ°)
+	uint8_t buffer_count;  // ÐšÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ ÑÐ»ÐµÐ¼ÐµÐ½Ñ‚Ð¾Ð² Ð² Ð±ÑƒÑ„ÐµÑ€Ðµ
+	uint16_t addr;         // ÐÐ°Ñ‡Ð°Ð»ÑŒÐ½Ñ‹Ð¹ Ð°Ð´Ñ€ÐµÑ Ð² EEPROM
 } param_eeprom_t;
 
 
-// Ñòðóêòóðà çàïèñè â áóôåðå
+// Ð¡Ñ‚Ñ€ÑƒÐºÑ‚ÑƒÑ€Ð° Ð·Ð°Ð¿Ð¸ÑÐ¸ Ð² Ð±ÑƒÑ„ÐµÑ€Ðµ
 typedef struct {
-	uint16_t adr_eeprom;	// Àäðåñ EEPROM êóäà çàïèñûâàåì äàííûå
-	uint8_t newStatus;	// íîâûé ñòàòóñ çàïèñè
-	const uint8_t *data_ptr; // Óêàçàòåëü íà äàííûå
-	uint8_t data_size;	// Ðàçìåð äàííûõ
+	uint16_t adr_eeprom;	// ÐÐ´Ñ€ÐµÑ EEPROM ÐºÑƒÐ´Ð° Ð·Ð°Ð¿Ð¸ÑÑ‹Ð²Ð°ÐµÐ¼ Ð´Ð°Ð½Ð½Ñ‹Ðµ
+	uint8_t newStatus;	// Ð½Ð¾Ð²Ñ‹Ð¹ ÑÑ‚Ð°Ñ‚ÑƒÑ Ð·Ð°Ð¿Ð¸ÑÐ¸
+	const uint8_t *data_ptr; // Ð£ÐºÐ°Ð·Ð°Ñ‚ÐµÐ»ÑŒ Ð½Ð° Ð´Ð°Ð½Ð½Ñ‹Ðµ
+	uint8_t data_size;	// Ð Ð°Ð·Ð¼ÐµÑ€ Ð´Ð°Ð½Ð½Ñ‹Ñ…
 } buffer_record_t;
 
 volatile buffer_record_t eeprom_writebuffer[MAX_WRITE_BUFFER_SIZE];
 volatile uint8_t eeprom_writebuffer_head = 0;
 volatile uint8_t eeprom_writebuffer_tail = 0;
-// Ôëàã, óêàçûâàþùèé, ÷òî çàïèñü EEPROM â ïðîöåññå
+// Ð¤Ð»Ð°Ð³, ÑƒÐºÐ°Ð·Ñ‹Ð²Ð°ÑŽÑ‰Ð¸Ð¹, Ñ‡Ñ‚Ð¾ Ð·Ð°Ð¿Ð¸ÑÑŒ EEPROM Ð² Ð¿Ñ€Ð¾Ñ†ÐµÑÑÐµ
 volatile uint8_t eeprom_busy_flag = 0;
-// Ñòàòè÷åñêàÿ ïåðåìåííàÿ äëÿ îòñëåæèâàíèÿ ïîçèöèè â òåêóùåì áëîêå çàïèñè
-// Çíà÷åíèå 0 îçíà÷àåò, ÷òî äëÿ íîâîãî áëîêà åùå íå áûë çàïèñàí newStatus.
-// Ïîñëå çàïèñè newStatus current_byte_index ñòàíîâèòñÿ 1.
+// Ð¡Ñ‚Ð°Ñ‚Ð¸Ñ‡ÐµÑÐºÐ°Ñ Ð¿ÐµÑ€ÐµÐ¼ÐµÐ½Ð½Ð°Ñ Ð´Ð»Ñ Ð¾Ñ‚ÑÐ»ÐµÐ¶Ð¸Ð²Ð°Ð½Ð¸Ñ Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¸ Ð² Ñ‚ÐµÐºÑƒÑ‰ÐµÐ¼ Ð±Ð»Ð¾ÐºÐµ Ð·Ð°Ð¿Ð¸ÑÐ¸
+// Ð—Ð½Ð°Ñ‡ÐµÐ½Ð¸Ðµ 0 Ð¾Ð·Ð½Ð°Ñ‡Ð°ÐµÑ‚, Ñ‡Ñ‚Ð¾ Ð´Ð»Ñ Ð½Ð¾Ð²Ð¾Ð³Ð¾ Ð±Ð»Ð¾ÐºÐ° ÐµÑ‰Ðµ Ð½Ðµ Ð±Ñ‹Ð» Ð·Ð°Ð¿Ð¸ÑÐ°Ð½ newStatus.
+// ÐŸÐ¾ÑÐ»Ðµ Ð·Ð°Ð¿Ð¸ÑÐ¸ newStatus current_byte_index ÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚ÑÑ 1.
 static volatile uint8_t current_byte_index = 0;
 
-/* ************************************ ñêðèïò íà ïèòîíå ãåíåðèðóåò êîä äëÿ ïåðåìåííûõ  ******************************
+/* ************************************ ÑÐºÑ€Ð¸Ð¿Ñ‚ Ð½Ð° Ð¿Ð¸Ñ‚Ð¾Ð½Ðµ Ð³ÐµÐ½ÐµÑ€Ð¸Ñ€ÑƒÐµÑ‚ ÐºÐ¾Ð´ Ð´Ð»Ñ Ð¿ÐµÑ€ÐµÐ¼ÐµÐ½Ð½Ñ‹Ñ…  ******************************
 
-# Ðàçìåð EEPROM
+# Ð Ð°Ð·Ð¼ÐµÑ€ EEPROM
 EEPROM_SIZE = 1000
-EEPROM_START_ADR = 100  # Íà÷àëüíûé àäðåñ
+EEPROM_START_ADR = 100  # ÐÐ°Ñ‡Ð°Ð»ÑŒÐ½Ñ‹Ð¹ Ð°Ð´Ñ€ÐµÑ
 
-# Òàáëèöà äàííûõ (name_param, òèï, êîëè÷åñòâî ýëåìåíòîâ)
+# Ð¢Ð°Ð±Ð»Ð¸Ñ†Ð° Ð´Ð°Ð½Ð½Ñ‹Ñ… (name_param, Ñ‚Ð¸Ð¿, ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ ÑÐ»ÐµÐ¼ÐµÐ½Ñ‚Ð¾Ð²)
 params = [
 {"name_param": "EE_LCD_LIGHT", "type": "uint8_t", "count": 5},
 {"name_param": "EE_BAT_MIN_V", "type": "uint16_t", "count": 100},
-# Äîáàâüòå äîïîëíèòåëüíûå ïàðàìåòðû ïî íåîáõîäèìîñòè
+# Ð”Ð¾Ð±Ð°Ð²ÑŒÑ‚Ðµ Ð´Ð¾Ð¿Ð¾Ð»Ð½Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ñ‹Ðµ Ð¿Ð°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ñ‹ Ð¿Ð¾ Ð½ÐµÐ¾Ð±Ñ…Ð¾Ð´Ð¸Ð¼Ð¾ÑÑ‚Ð¸
 ]
 
-# Âûâîä îïèñàíèÿ áëîêîâ ïàðàìåòðîâ
-print("// Íàèìåíîâàíèå èñïîëüçóåìûõ ïàðàìåòðîâ. Íåîáõîäèìî ïåðåíåñòè â .h ôàéë")
+# Ð’Ñ‹Ð²Ð¾Ð´ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ñ Ð±Ð»Ð¾ÐºÐ¾Ð² Ð¿Ð°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ð¾Ð²
+print("// ÐÐ°Ð¸Ð¼ÐµÐ½Ð¾Ð²Ð°Ð½Ð¸Ðµ Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÐ¼Ñ‹Ñ… Ð¿Ð°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ð¾Ð². ÐÐµÐ¾Ð±Ñ…Ð¾Ð´Ð¸Ð¼Ð¾ Ð¿ÐµÑ€ÐµÐ½ÐµÑÑ‚Ð¸ Ð² .h Ñ„Ð°Ð¹Ð»")
 print("enum {")
 for param in params:
 	print(f"\t{param['name_param']},")
 print("};")
 
-# Âûâîä çàãîëîâêîâ
-print("\n// Íåîáõîäèìî çàïîëíèòü è ïðè íåîáõîäèìîñòè äîáàâèòü ñëåäóþùóþ ñòðóêòóðó, òàê æå äëÿ çàïîëíåíèÿ òàáëèöû ìîæíî âîñïîëüçîâàòüñÿ ñêðèïòîì ïèòîíà")
+# Ð’Ñ‹Ð²Ð¾Ð´ Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²ÐºÐ¾Ð²
+print("\n// ÐÐµÐ¾Ð±Ñ…Ð¾Ð´Ð¸Ð¼Ð¾ Ð·Ð°Ð¿Ð¾Ð»Ð½Ð¸Ñ‚ÑŒ Ð¸ Ð¿Ñ€Ð¸ Ð½ÐµÐ¾Ð±Ñ…Ð¾Ð´Ð¸Ð¼Ð¾ÑÑ‚Ð¸ Ð´Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ ÑÐ»ÐµÐ´ÑƒÑŽÑ‰ÑƒÑŽ ÑÑ‚Ñ€ÑƒÐºÑ‚ÑƒÑ€Ñƒ, Ñ‚Ð°Ðº Ð¶Ðµ Ð´Ð»Ñ Ð·Ð°Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ Ñ‚Ð°Ð±Ð»Ð¸Ñ†Ñ‹ Ð¼Ð¾Ð¶Ð½Ð¾ Ð²Ð¾ÑÐ¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÑŒÑÑ ÑÐºÑ€Ð¸Ð¿Ñ‚Ð¾Ð¼ Ð¿Ð¸Ñ‚Ð¾Ð½Ð°")
 print("enum {")
 print(f"\tEEPROM_SIZE = {EEPROM_SIZE},")
 print(f"\tEEPROM_START_ADR = {EEPROM_START_ADR},")
 
-	# Ïîäñ÷èòûâàåì ïàðàìåòðû è ãåíåðèðóåì êîä äëÿ êàæäîãî èç íèõ
+	# ÐŸÐ¾Ð´ÑÑ‡Ð¸Ñ‚Ñ‹Ð²Ð°ÐµÐ¼ Ð¿Ð°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ñ‹ Ð¸ Ð³ÐµÐ½ÐµÑ€Ð¸Ñ€ÑƒÐµÐ¼ ÐºÐ¾Ð´ Ð´Ð»Ñ ÐºÐ°Ð¶Ð´Ð¾Ð³Ð¾ Ð¸Ð· Ð½Ð¸Ñ…
 for i, param in enumerate(params):
-	# Ãåíåðèðóåì êîä äëÿ êàæäîãî áëîêà
+	# Ð“ÐµÐ½ÐµÑ€Ð¸Ñ€ÑƒÐµÐ¼ ÐºÐ¾Ð´ Ð´Ð»Ñ ÐºÐ°Ð¶Ð´Ð¾Ð³Ð¾ Ð±Ð»Ð¾ÐºÐ°
 	print(f"\n\t{param['name_param']}_SIZE = sizeof({param['type']}),")
 	print(f"\t{param['name_param']}_COUNT = {param['count']},")
 	
-	# Ïðîâåðÿåì, åñëè i > 0, èñïîëüçóåì àäðåñ êîíöà ïðåäûäóùåãî áëîêà, èíà÷å íà÷àëüíûé àäðåñ
+	# ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼, ÐµÑÐ»Ð¸ i > 0, Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÐ¼ Ð°Ð´Ñ€ÐµÑ ÐºÐ¾Ð½Ñ†Ð° Ð¿Ñ€ÐµÐ´Ñ‹Ð´ÑƒÑ‰ÐµÐ³Ð¾ Ð±Ð»Ð¾ÐºÐ°, Ð¸Ð½Ð°Ñ‡Ðµ Ð½Ð°Ñ‡Ð°Ð»ÑŒÐ½Ñ‹Ð¹ Ð°Ð´Ñ€ÐµÑ
 	if i > 0:
 		print(f"\t{param['name_param']}_ADDR = {params[i-1]['name_param']}_END,")
 	else:
 		print(f"\t{param['name_param']}_ADDR = EEPROM_START_ADR,")
 	
-	# Ôîðìóëà äëÿ ðàñ÷¸òà êîíöà áëîêà
-	print(f"\t{param['name_param']}_END = {param['name_param']}_ADDR + ({param['name_param']}_SIZE + 1) * {param['name_param']}_COUNT,")  # Ïëþñ 1 äëÿ ó÷åòà êîëüöåâîãî áóôåðà
+	# Ð¤Ð¾Ñ€Ð¼ÑƒÐ»Ð° Ð´Ð»Ñ Ñ€Ð°ÑÑ‡Ñ‘Ñ‚Ð° ÐºÐ¾Ð½Ñ†Ð° Ð±Ð»Ð¾ÐºÐ°
+	print(f"\t{param['name_param']}_END = {param['name_param']}_ADDR + ({param['name_param']}_SIZE + 1) * {param['name_param']}_COUNT,")  # ÐŸÐ»ÑŽÑ 1 Ð´Ð»Ñ ÑƒÑ‡ÐµÑ‚Ð° ÐºÐ¾Ð»ÑŒÑ†ÐµÐ²Ð¾Ð³Ð¾ Ð±ÑƒÑ„ÐµÑ€Ð°
 
-	# Âûâîäèì ïðîâåðêó ïåðåïîëíåíèÿ EEPROM
+	# Ð’Ñ‹Ð²Ð¾Ð´Ð¸Ð¼ Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÑƒ Ð¿ÐµÑ€ÐµÐ¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ EEPROM
 print("\n};")
-print("\n// Ïðîâåðÿåì âûõîä çà ãðàíèöû EEPROM (åñëè çäåñü êîìïèëÿòîð âûäàåò îøèáêó çíà÷èò áëîêè ïåðåìåííûõ íå ïîìåùàþòñÿ â EEPROM)")
-print("// !!!!!!!!!!!!!!            Íå çàáûâàåì óêàçàòü èíäåêñ ïîñëåäíåé ïåðåìåííîé          !!!!!!!!!!!!!!!!!!!!!!")
+print("\n// ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼ Ð²Ñ‹Ñ…Ð¾Ð´ Ð·Ð° Ð³Ñ€Ð°Ð½Ð¸Ñ†Ñ‹ EEPROM (ÐµÑÐ»Ð¸ Ð·Ð´ÐµÑÑŒ ÐºÐ¾Ð¼Ð¿Ð¸Ð»ÑÑ‚Ð¾Ñ€ Ð²Ñ‹Ð´Ð°ÐµÑ‚ Ð¾ÑˆÐ¸Ð±ÐºÑƒ Ð·Ð½Ð°Ñ‡Ð¸Ñ‚ Ð±Ð»Ð¾ÐºÐ¸ Ð¿ÐµÑ€ÐµÐ¼ÐµÐ½Ð½Ñ‹Ñ… Ð½Ðµ Ð¿Ð¾Ð¼ÐµÑ‰Ð°ÑŽÑ‚ÑÑ Ð² EEPROM)")
+print("// !!!!!!!!!!!!!!            ÐÐµ Ð·Ð°Ð±Ñ‹Ð²Ð°ÐµÐ¼ ÑƒÐºÐ°Ð·Ð°Ñ‚ÑŒ Ð¸Ð½Ð´ÐµÐºÑ Ð¿Ð¾ÑÐ»ÐµÐ´Ð½ÐµÐ¹ Ð¿ÐµÑ€ÐµÐ¼ÐµÐ½Ð½Ð¾Ð¹          !!!!!!!!!!!!!!!!!!!!!!")
 print(f"extern uint8_t error_eeprom_overflow[{params[-1]['name_param']}_END > EEPROM_SIZE ? -1 : 0];")
 
-# Ïå÷àòàåì îïèñàíèå áëîêà äàííûõ
+# ÐŸÐµÑ‡Ð°Ñ‚Ð°ÐµÐ¼ Ð¾Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ Ð±Ð»Ð¾ÐºÐ° Ð´Ð°Ð½Ð½Ñ‹Ñ…
 print("\nconst param_eeprom_t param_eeprom[] PROGMEM = {")
 for i, param in enumerate(params):
-	# Äîáàâëÿåì êîììåíòàðèé ñ èíäåêñîì è íàèìåíîâàíèåì ïàðàìåòðà
-	print(f"\t{{{param['name_param']}_SIZE, {param['name_param']}_COUNT, {param['name_param']}_ADDR}},  //  Èíäåêñ {i}, {param['name_param']}, òèï {param['type']}, \têîëè÷åñòâî ýëåìåíòîâ {param['count']}")
+	# Ð”Ð¾Ð±Ð°Ð²Ð»ÑÐµÐ¼ ÐºÐ¾Ð¼Ð¼ÐµÐ½Ñ‚Ð°Ñ€Ð¸Ð¹ Ñ Ð¸Ð½Ð´ÐµÐºÑÐ¾Ð¼ Ð¸ Ð½Ð°Ð¸Ð¼ÐµÐ½Ð¾Ð²Ð°Ð½Ð¸ÐµÐ¼ Ð¿Ð°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ð°
+	print(f"\t{{{param['name_param']}_SIZE, {param['name_param']}_COUNT, {param['name_param']}_ADDR}},  //  Ð˜Ð½Ð´ÐµÐºÑ {i}, {param['name_param']}, Ñ‚Ð¸Ð¿ {param['type']}, \tÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ ÑÐ»ÐµÐ¼ÐµÐ½Ñ‚Ð¾Ð² {param['count']}")
 print("};")
 
 
 */
 
 /******************************************************************************************************************************************************************/
-/*                                                                  Êîä ïîëó÷åííûé èç ïèòîíà                                                                      */
+/*                                                                  ÐšÐ¾Ð´ Ð¿Ð¾Ð»ÑƒÑ‡ÐµÐ½Ð½Ñ‹Ð¹ Ð¸Ð· Ð¿Ð¸Ñ‚Ð¾Ð½Ð°                                                                      */
 /******************************************************************************************************************************************************************/
 
 
 
-// Íåîáõîäèìî çàïîëíèòü è ïðè íåîáõîäèìîñòè äîáàâèòü ñëåäóþùóþ ñòðóêòóðó, òàê æå äëÿ çàïîëíåíèÿ òàáëèöû ìîæíî âîñïîëüçîâàòüñÿ ñêðèïòîì ïèòîíà
+// ÐÐµÐ¾Ð±Ñ…Ð¾Ð´Ð¸Ð¼Ð¾ Ð·Ð°Ð¿Ð¾Ð»Ð½Ð¸Ñ‚ÑŒ Ð¸ Ð¿Ñ€Ð¸ Ð½ÐµÐ¾Ð±Ñ…Ð¾Ð´Ð¸Ð¼Ð¾ÑÑ‚Ð¸ Ð´Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ ÑÐ»ÐµÐ´ÑƒÑŽÑ‰ÑƒÑŽ ÑÑ‚Ñ€ÑƒÐºÑ‚ÑƒÑ€Ñƒ, Ñ‚Ð°Ðº Ð¶Ðµ Ð´Ð»Ñ Ð·Ð°Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ Ñ‚Ð°Ð±Ð»Ð¸Ñ†Ñ‹ Ð¼Ð¾Ð¶Ð½Ð¾ Ð²Ð¾ÑÐ¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÑŒÑÑ ÑÐºÑ€Ð¸Ð¿Ñ‚Ð¾Ð¼ Ð¿Ð¸Ñ‚Ð¾Ð½Ð°
 enum {
 	EEPROM_SIZE = 1000,
 	EEPROM_START_ADR = 00,
@@ -146,13 +146,13 @@ enum {
 
 };
 
-// Ïðîâåðÿåì âûõîä çà ãðàíèöû EEPROM (åñëè çäåñü êîìïèëÿòîð âûäàåò îøèáêó çíà÷èò áëîêè ïåðåìåííûõ íå ïîìåùàþòñÿ â EEPROM)
-// !!!!!!!!!!!!!!            Íå çàáûâàåì óêàçàòü èíäåêñ ïîñëåäíåé ïåðåìåííîé          !!!!!!!!!!!!!!!!!!!!!!
+// ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼ Ð²Ñ‹Ñ…Ð¾Ð´ Ð·Ð° Ð³Ñ€Ð°Ð½Ð¸Ñ†Ñ‹ EEPROM (ÐµÑÐ»Ð¸ Ð·Ð´ÐµÑÑŒ ÐºÐ¾Ð¼Ð¿Ð¸Ð»ÑÑ‚Ð¾Ñ€ Ð²Ñ‹Ð´Ð°ÐµÑ‚ Ð¾ÑˆÐ¸Ð±ÐºÑƒ Ð·Ð½Ð°Ñ‡Ð¸Ñ‚ Ð±Ð»Ð¾ÐºÐ¸ Ð¿ÐµÑ€ÐµÐ¼ÐµÐ½Ð½Ñ‹Ñ… Ð½Ðµ Ð¿Ð¾Ð¼ÐµÑ‰Ð°ÑŽÑ‚ÑÑ Ð² EEPROM)
+// !!!!!!!!!!!!!!            ÐÐµ Ð·Ð°Ð±Ñ‹Ð²Ð°ÐµÐ¼ ÑƒÐºÐ°Ð·Ð°Ñ‚ÑŒ Ð¸Ð½Ð´ÐµÐºÑ Ð¿Ð¾ÑÐ»ÐµÐ´Ð½ÐµÐ¹ Ð¿ÐµÑ€ÐµÐ¼ÐµÐ½Ð½Ð¾Ð¹          !!!!!!!!!!!!!!!!!!!!!!
 extern uint8_t error_eeprom_overflow[EE_BAT_MIN_V_END > EEPROM_SIZE ? -1 : 0];
 
 const param_eeprom_t param_eeprom[] PROGMEM = {
-	{EE_LCD_LIGHT_SIZE, EE_LCD_LIGHT_COUNT, EE_LCD_LIGHT_ADDR},  //  Èíäåêñ 0, EE_LCD_LIGHT, òèï uint8_t, 	êîëè÷åñòâî ýëåìåíòîâ 5
-	{EE_BAT_MIN_V_SIZE, EE_BAT_MIN_V_COUNT, EE_BAT_MIN_V_ADDR},  //  Èíäåêñ 1, EE_BAT_MIN_V, òèï uint16_t, 	êîëè÷åñòâî ýëåìåíòîâ 100
+	{EE_LCD_LIGHT_SIZE, EE_LCD_LIGHT_COUNT, EE_LCD_LIGHT_ADDR},  //  Ð˜Ð½Ð´ÐµÐºÑ 0, EE_LCD_LIGHT, Ñ‚Ð¸Ð¿ uint8_t, 	ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ ÑÐ»ÐµÐ¼ÐµÐ½Ñ‚Ð¾Ð² 5
+	{EE_BAT_MIN_V_SIZE, EE_BAT_MIN_V_COUNT, EE_BAT_MIN_V_ADDR},  //  Ð˜Ð½Ð´ÐµÐºÑ 1, EE_BAT_MIN_V, Ñ‚Ð¸Ð¿ uint16_t, 	ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ ÑÐ»ÐµÐ¼ÐµÐ½Ñ‚Ð¾Ð² 100
 };
 
 
@@ -167,7 +167,7 @@ const param_eeprom_t param_eeprom[] PROGMEM = {
 #define EEPROM_Write_Block(address, data) eeprom_update_byte((uint8_t *)(uint16_t)(address), (data))
 
 
-// ×òåíèå ïàðàìåòðîâ ïåðåìåííîé èç ôëåø-ïàìÿòè ïî èíäåêñó èëè èìåíè ïåðåìåííîé (3us)
+// Ð§Ñ‚ÐµÐ½Ð¸Ðµ Ð¿Ð°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ð¾Ð² Ð¿ÐµÑ€ÐµÐ¼ÐµÐ½Ð½Ð¾Ð¹ Ð¸Ð· Ñ„Ð»ÐµÑˆ-Ð¿Ð°Ð¼ÑÑ‚Ð¸ Ð¿Ð¾ Ð¸Ð½Ð´ÐµÐºÑÑƒ Ð¸Ð»Ð¸ Ð¸Ð¼ÐµÐ½Ð¸ Ð¿ÐµÑ€ÐµÐ¼ÐµÐ½Ð½Ð¾Ð¹ (3us)
 void EEPROM_ReadParam(uint8_t index, param_eeprom_t *param) {
 	param->element_size = pgm_read_byte(&(param_eeprom[index].element_size));
 	param->buffer_count = pgm_read_byte(&(param_eeprom[index].buffer_count));
@@ -176,7 +176,7 @@ void EEPROM_ReadParam(uint8_t index, param_eeprom_t *param) {
 
 static uint16_t EEPROM_FindCurrentAddress(const uint8_t index, param_eeprom_t *param) {
     uint8_t status, pred_status;
-    // Çàâîäèì îòäåëüíóþ ïåðåìåííóþ äëÿ òåêóùåãî àäðåñà, ÷òîáû íå ìåíÿòü param.addr
+    // Ð—Ð°Ð²Ð¾Ð´Ð¸Ð¼ Ð¾Ñ‚Ð´ÐµÐ»ÑŒÐ½ÑƒÑŽ Ð¿ÐµÑ€ÐµÐ¼ÐµÐ½Ð½ÑƒÑŽ Ð´Ð»Ñ Ñ‚ÐµÐºÑƒÑ‰ÐµÐ³Ð¾ Ð°Ð´Ñ€ÐµÑÐ°, Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ð½Ðµ Ð¼ÐµÐ½ÑÑ‚ÑŒ param.addr
     uint16_t current_addr = param->addr;
     uint16_t EeBufEnd = param->addr + (param->buffer_count - 1) * (param->element_size + 1);
     
@@ -192,7 +192,7 @@ static uint16_t EEPROM_FindCurrentAddress(const uint8_t index, param_eeprom_t *p
         pred_status = status;
     }
     
-    // Âîçâðàùàåì àäðåñ ñëåäóþùåãî áàéòà ïîñëå ñòàòóñà ïîñëåäíåãî êîððåêòíîãî ýëåìåíòà
+    // Ð’Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°ÐµÐ¼ Ð°Ð´Ñ€ÐµÑ ÑÐ»ÐµÐ´ÑƒÑŽÑ‰ÐµÐ³Ð¾ Ð±Ð°Ð¹Ñ‚Ð° Ð¿Ð¾ÑÐ»Ðµ ÑÑ‚Ð°Ñ‚ÑƒÑÐ° Ð¿Ð¾ÑÐ»ÐµÐ´Ð½ÐµÐ³Ð¾ ÐºÐ¾Ñ€Ñ€ÐµÐºÑ‚Ð½Ð¾Ð³Ð¾ ÑÐ»ÐµÐ¼ÐµÐ½Ñ‚Ð°
     return current_addr + 1;
 }
 
@@ -200,8 +200,8 @@ volatile uint8_t Aaaaa;
 
 uint8_t EEPROM_ReadWearLeveledByte(const uint8_t index) {
 	param_eeprom_t param;
-	 // ×òåíèå äàííûõ î ïàðàìåòðå èç flash
-	EEPROM_ReadParam(index, &param);  // index — ýòî èíäåêñ â ìàññèâå param_eeprom
+	 // Ð§Ñ‚ÐµÐ½Ð¸Ðµ Ð´Ð°Ð½Ð½Ñ‹Ñ… Ð¾ Ð¿Ð°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ðµ Ð¸Ð· flash
+	EEPROM_ReadParam(index, &param);  // index â€” ÑÑ‚Ð¾ Ð¸Ð½Ð´ÐµÐºÑ Ð² Ð¼Ð°ÑÑÐ¸Ð²Ðµ param_eeprom
 	if (param.element_size != 1) return 0;
 	uint16_t address = EEPROM_FindCurrentAddress(index, &param);
 	return eeprom_read_byte((const uint8_t*)(uint16_t)address);
@@ -209,19 +209,19 @@ uint8_t EEPROM_ReadWearLeveledByte(const uint8_t index) {
 
 uint16_t EEPROM_ReadWearLeveledWord(const uint8_t index) {
 	param_eeprom_t param;
-	// ×òåíèå äàííûõ î ïàðàìåòðå èç flash
-	EEPROM_ReadParam(index, &param);  // index — ýòî èíäåêñ â ìàññèâå param_eeprom
+	// Ð§Ñ‚ÐµÐ½Ð¸Ðµ Ð´Ð°Ð½Ð½Ñ‹Ñ… Ð¾ Ð¿Ð°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ðµ Ð¸Ð· flash
+	EEPROM_ReadParam(index, &param);  // index â€” ÑÑ‚Ð¾ Ð¸Ð½Ð´ÐµÐºÑ Ð² Ð¼Ð°ÑÑÐ¸Ð²Ðµ param_eeprom
 	if (param.element_size != 2) return 0;
 	uint16_t address = EEPROM_FindCurrentAddress(index, &param);
 	return eeprom_read_word((const uint16_t*)address);
 }
 
-// ×èòàåì ïàðàìåðò èç EEPROM êîëè÷åñòâî ñ÷èòàííûõ áàéò âûáèðàåòñÿ ìèíèìàëüíûì
+// Ð§Ð¸Ñ‚Ð°ÐµÐ¼ Ð¿Ð°Ñ€Ð°Ð¼ÐµÑ€Ñ‚ Ð¸Ð· EEPROM ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ ÑÑ‡Ð¸Ñ‚Ð°Ð½Ð½Ñ‹Ñ… Ð±Ð°Ð¹Ñ‚ Ð²Ñ‹Ð±Ð¸Ñ€Ð°ÐµÑ‚ÑÑ Ð¼Ð¸Ð½Ð¸Ð¼Ð°Ð»ÑŒÐ½Ñ‹Ð¼
 void EEPROM_ReadWearLeveledBlock(const uint8_t index, void * ptr, uint8_t size) {
 	param_eeprom_t param;
 	
-	// ×òåíèå äàííûõ î ïàðàìåòðå èç flash
-	EEPROM_ReadParam(index, &param);  // index — ýòî èíäåêñ â ìàññèâå param_eeprom
+	// Ð§Ñ‚ÐµÐ½Ð¸Ðµ Ð´Ð°Ð½Ð½Ñ‹Ñ… Ð¾ Ð¿Ð°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ðµ Ð¸Ð· flash
+	EEPROM_ReadParam(index, &param);  // index â€” ÑÑ‚Ð¾ Ð¸Ð½Ð´ÐµÐºÑ Ð² Ð¼Ð°ÑÑÐ¸Ð²Ðµ param_eeprom
 	uint16_t address = EEPROM_FindCurrentAddress(index, &param);
 	if ( size > param.element_size )
 	size = param.element_size;
@@ -232,10 +232,10 @@ void EEPROM_ReadWearLeveledBlock(const uint8_t index, void * ptr, uint8_t size) 
 uint8_t EEPROM_CompareData(uint16_t eeprom_addr, const void *data, uint8_t size) {
 	for (uint8_t i = 0; i < size; i++) {
 		if (eeprom_read_byte((const uint8_t *)(eeprom_addr + i)) != ((const uint8_t *)data)[i]) {
-			return 0; // åñòü ðàçëè÷èÿ
+			return 0; // ÐµÑÑ‚ÑŒ Ñ€Ð°Ð·Ð»Ð¸Ñ‡Ð¸Ñ
 		}
 	}
-	return 1; // äàííûå èäåíòè÷íû
+	return 1; // Ð´Ð°Ð½Ð½Ñ‹Ðµ Ð¸Ð´ÐµÐ½Ñ‚Ð¸Ñ‡Ð½Ñ‹
 }
 
 void eeprom_writebuffer_add(const uint16_t *addr, const uint8_t *newStatus, const uint8_t *data, const uint8_t *data_size);
@@ -243,9 +243,9 @@ void eeprom_writebuffer_add(const uint16_t *addr, const uint8_t *newStatus, cons
 void EEPROM_WriteWearLeveled(const uint8_t index, const void * data) {
   param_eeprom_t param;
   
-  // ×òåíèå äàííûõ î ïàðàìåòðå èç flash
-  EEPROM_ReadParam(index, &param);  // index — ýòî èíäåêñ â ìàññèâå param_eeprom
-  uint16_t address = EEPROM_FindCurrentAddress(index, &param) -1; // -1 ìû ïîëó÷àåì àäðåñ íà÷àëî áëîêà, à íå çàïèñàííûõ äàííûõ
+  // Ð§Ñ‚ÐµÐ½Ð¸Ðµ Ð´Ð°Ð½Ð½Ñ‹Ñ… Ð¾ Ð¿Ð°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ðµ Ð¸Ð· flash
+  EEPROM_ReadParam(index, &param);  // index â€” ÑÑ‚Ð¾ Ð¸Ð½Ð´ÐµÐºÑ Ð² Ð¼Ð°ÑÑÐ¸Ð²Ðµ param_eeprom
+  uint16_t address = EEPROM_FindCurrentAddress(index, &param) -1; // -1 Ð¼Ñ‹ Ð¿Ð¾Ð»ÑƒÑ‡Ð°ÐµÐ¼ Ð°Ð´Ñ€ÐµÑ Ð½Ð°Ñ‡Ð°Ð»Ð¾ Ð±Ð»Ð¾ÐºÐ°, Ð° Ð½Ðµ Ð·Ð°Ð¿Ð¸ÑÐ°Ð½Ð½Ñ‹Ñ… Ð´Ð°Ð½Ð½Ñ‹Ñ…
 
   // Only perform the write if the new value is different from what's currently stored
   if (EEPROM_CompareData(address+1,data,param.element_size))  return;
@@ -256,9 +256,9 @@ void EEPROM_WriteWearLeveled(const uint8_t index, const void * data) {
 
   // Move pointer to the next element in the buffer, wrapping around if necessary
   address += param.element_size + 1;
-  // ïîëó÷àåì àäðåñ ñëåäóþùåãî çà ïðåäåëàìè áëîêà
+  // Ð¿Ð¾Ð»ÑƒÑ‡Ð°ÐµÐ¼ Ð°Ð´Ñ€ÐµÑ ÑÐ»ÐµÐ´ÑƒÑŽÑ‰ÐµÐ³Ð¾ Ð·Ð° Ð¿Ñ€ÐµÐ´ÐµÐ»Ð°Ð¼Ð¸ Ð±Ð»Ð¾ÐºÐ°
   uint16_t EeBufOffBlock = param.addr + param.buffer_count * (param.element_size + 1); 
-  if (address == EeBufOffBlock) // åñëè ïîëó÷åííûé àäðåñ ðàâåí àäðåñó çà ïðåäåëàìè áëîêà, òî êàêîãî áûòü íå ìîæåò è ìû ìåíÿåì åãî íà íà÷àëüíûé
+  if (address == EeBufOffBlock) // ÐµÑÐ»Ð¸ Ð¿Ð¾Ð»ÑƒÑ‡ÐµÐ½Ð½Ñ‹Ð¹ Ð°Ð´Ñ€ÐµÑ Ñ€Ð°Ð²ÐµÐ½ Ð°Ð´Ñ€ÐµÑÑƒ Ð·Ð° Ð¿Ñ€ÐµÐ´ÐµÐ»Ð°Ð¼Ð¸ Ð±Ð»Ð¾ÐºÐ°, Ñ‚Ð¾ ÐºÐ°ÐºÐ¾Ð³Ð¾ Ð±Ñ‹Ñ‚ÑŒ Ð½Ðµ Ð¼Ð¾Ð¶ÐµÑ‚ Ð¸ Ð¼Ñ‹ Ð¼ÐµÐ½ÑÐµÐ¼ ÐµÐ³Ð¾ Ð½Ð° Ð½Ð°Ñ‡Ð°Ð»ÑŒÐ½Ñ‹Ð¹
     address = param.addr;
 
   // If self-programming is used in the application, insert code here
@@ -273,48 +273,48 @@ void EEPROM_WriteWearLeveled(const uint8_t index, const void * data) {
  eeprom_writebuffer_add(&address,&newStatusValue, data, &param.element_size);
 }
 
-// Ôóíêöèÿ äëÿ äîáàâëåíèÿ çàïèñè â áóôåð
+// Ð¤ÑƒÐ½ÐºÑ†Ð¸Ñ Ð´Ð»Ñ Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½Ð¸Ñ Ð·Ð°Ð¿Ð¸ÑÐ¸ Ð² Ð±ÑƒÑ„ÐµÑ€
 void eeprom_writebuffer_add(const uint16_t *addr, const uint8_t *newStatus, const uint8_t *data, const uint8_t *data_size) {
-	// Ïðîâåðêà çàïîëíåííîñòè áóôåðà
+	// ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð·Ð°Ð¿Ð¾Ð»Ð½ÐµÐ½Ð½Ð¾ÑÑ‚Ð¸ Ð±ÑƒÑ„ÐµÑ€Ð°
 	
 	if (eeprom_busy_flag) return;
 	
 	uint8_t next_head = (eeprom_writebuffer_head + 1) % MAX_WRITE_BUFFER_SIZE;
 	if (next_head == eeprom_writebuffer_tail) {
-		// Áóôåð ïåðåïîëíåí, ìîæíî âûïîëíèòü îáðàáîòêó îøèáêè
+		// Ð‘ÑƒÑ„ÐµÑ€ Ð¿ÐµÑ€ÐµÐ¿Ð¾Ð»Ð½ÐµÐ½, Ð¼Ð¾Ð¶Ð½Ð¾ Ð²Ñ‹Ð¿Ð¾Ð»Ð½Ð¸Ñ‚ÑŒ Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÑƒ Ð¾ÑˆÐ¸Ð±ÐºÐ¸
 		return;
 	}
 
-	// Çàïîëíÿåì çàïèñü â áóôåðå
+	// Ð—Ð°Ð¿Ð¾Ð»Ð½ÑÐµÐ¼ Ð·Ð°Ð¿Ð¸ÑÑŒ Ð² Ð±ÑƒÑ„ÐµÑ€Ðµ
 	eeprom_writebuffer[eeprom_writebuffer_head].adr_eeprom = *addr;
 	eeprom_writebuffer[eeprom_writebuffer_head].newStatus = *newStatus;
 	eeprom_writebuffer[eeprom_writebuffer_head].data_ptr = data;
 	eeprom_writebuffer[eeprom_writebuffer_head].data_size = *data_size;
 
-	// Ñäâèãàåì óêàçàòåëü ãîëîâû áóôåðà
+	// Ð¡Ð´Ð²Ð¸Ð³Ð°ÐµÐ¼ ÑƒÐºÐ°Ð·Ð°Ñ‚ÐµÐ»ÑŒ Ð³Ð¾Ð»Ð¾Ð²Ñ‹ Ð±ÑƒÑ„ÐµÑ€Ð°
 	eeprom_writebuffer_head = next_head;
 
-	// Åñëè çàïèñü íå çàíÿòà è áóôåð íå ïóñò (ïåðâûé ýëåìåíò)
+	// Ð•ÑÐ»Ð¸ Ð·Ð°Ð¿Ð¸ÑÑŒ Ð½Ðµ Ð·Ð°Ð½ÑÑ‚Ð° Ð¸ Ð±ÑƒÑ„ÐµÑ€ Ð½Ðµ Ð¿ÑƒÑÑ‚ (Ð¿ÐµÑ€Ð²Ñ‹Ð¹ ÑÐ»ÐµÐ¼ÐµÐ½Ñ‚)
 
 }
 
 void StartWriteBuffer (void){
-		// Çàïóñêàåì çàïèñü 
+		// Ð—Ð°Ð¿ÑƒÑÐºÐ°ÐµÐ¼ Ð·Ð°Ð¿Ð¸ÑÑŒ 
 	if (!eeprom_busy_flag) {
 		eeprom_busy_flag = 1;
-		//current_byte_index = 1;  // Ïîñëå newStatus ïåðåõîäèì ê äàííûì
+		//current_byte_index = 1;  // ÐŸÐ¾ÑÐ»Ðµ newStatus Ð¿ÐµÑ€ÐµÑ…Ð¾Ð´Ð¸Ð¼ Ðº Ð´Ð°Ð½Ð½Ñ‹Ð¼
 		EECR |= (1 << EERIE);
 	}
 }
 
-// Âåêòîð ïðåðûâàíèÿ "EEPROM Ready" äëÿ Atmega128
+// Ð’ÐµÐºÑ‚Ð¾Ñ€ Ð¿Ñ€ÐµÑ€Ñ‹Ð²Ð°Ð½Ð¸Ñ "EEPROM Ready" Ð´Ð»Ñ Atmega128
 
 ISR(EE_READY_vect){
     static volatile const buffer_record_t *record = NULL;
 	
     if (record == NULL || current_byte_index >= (record->data_size + 1)) {
 	    if (eeprom_writebuffer_tail == eeprom_writebuffer_head) {
-		    EECR &= ~(1 << EERIE); // Îòêëþ÷àåì ïðåðûâàíèå
+		    EECR &= ~(1 << EERIE); // ÐžÑ‚ÐºÐ»ÑŽÑ‡Ð°ÐµÐ¼ Ð¿Ñ€ÐµÑ€Ñ‹Ð²Ð°Ð½Ð¸Ðµ
 			record = NULL;
 		    eeprom_busy_flag = 0;
 		    return;
