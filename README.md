@@ -34,13 +34,13 @@ const param_eeprom_t param_eeprom[] PROGMEM = {
 
 "Для удобства таблицу параметров можно сформировать с помощью макроса или скрипта на Python.
 
-**2. Запись переменной с учетом износа
+### **2. Запись переменной с учетом износа
 EEPROM_WriteWearLeveled(index, &value);
 
-**3. Асинхронное начало записи из буфера
+### **3. Асинхронное начало записи из буфера
 StartWriteBuffer();
 
-**4. Чтение переменной из EEPROM
+### **4. Чтение переменной из EEPROM
 uint8_t val = EEPROM_ReadWearLeveledByte(index);
 uint16_t word = EEPROM_ReadWearLeveledWord(index);
 EEPROM_WriteWearLeveled(index, &data);
